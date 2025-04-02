@@ -19,7 +19,8 @@ from lightning.pytorch.loops.fetchers import _DataFetcher, _DataLoaderIterDataFe
 
 from training.lightning_module import LightningModule
 from datasets.lightning_data_module import LightningDataModule
-
+import os
+os.environ["NCCL_P2P_DISABLE"] = "1"
 
 def _should_check_val_fx(self: _TrainingEpochLoop, data_fetcher: _DataFetcher) -> bool:
     if not self._should_check_val_epoch():
