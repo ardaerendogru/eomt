@@ -7,7 +7,7 @@
 import timm
 import torch
 import torch.nn as nn
-from peft.lora import LoRA
+from peft import LoRA
 
 class ViT(nn.Module):
     def __init__(
@@ -15,7 +15,7 @@ class ViT(nn.Module):
         img_size: tuple[int, int],
         patch_size=16,
         backbone_name="vit_large_patch14_reg4_dinov2",
-        use_lora: bool = True,
+        use_lora: bool = False,
         lora_r: int = 32,
         num_lora_free_blocks: int = 4,  # Number of final blocks to exclude from LoRA
     ):

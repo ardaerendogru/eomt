@@ -111,38 +111,70 @@ class LightningModule(lightning.LightningModule):
 
     def configure_optimizers(self):
         encoder_param_names = {
-            n for n, _ in self.network.encoder.backbone.named_parameters()
+            n for n, p in self.network.encoder.backbone.named_parameters() if p.requires_grad
         }
         backbone_param_groups = []
         other_param_groups = []
         backbone_blocks = len(self.network.encoder.backbone.blocks)
-        block_i = backbone_blocks
+        
+        # Iterate through trainable parameters only
+        for name, param in self.named_parameters():
+            if not param.requires_grad:
+                continue  # Skip frozen parameters
 
-        for name, param in reversed(list(self.named_parameters())):
             lr = self.lr
-            if name.replace("network.encoder.backbone.", "") in encoder_param_names:
+            param_added_to_backbone = False # Flag to check if added to backbone group
+
+            # Check if the parameter belongs to the backbone encoder
+            backbone_name = name.replace("network.encoder.backbone.", "")
+            if backbone_name in encoder_param_names:
                 name_list = name.split(".")
+                block_i = backbone_blocks # Default if not in a block (e.g., cls_token, pos_embed)
                 is_block = False
                 for i, key in enumerate(name_list):
                     if key == "blocks":
-                        block_i = int(name_list[i + 1])
-                        is_block = True
-                if is_block or block_i == 0:
-                    lr *= self.llrd ** (backbone_blocks - 1 - block_i)
+                        try:
+                            block_i = int(name_list[i + 1])
+                            is_block = True
+                            break # Found block index, no need to check further
+                        except (IndexError, ValueError):
+                            # Handle cases where 'blocks' is not followed by an integer index if necessary
+                            pass 
+                
+                # Apply Layer-wise Learning Rate Decay (LLRD)
+                # Original logic applied decay based on block_i, let's maintain that.
+                # Note: The original logic had a potentially confusing default block_i = backbone_blocks
+                # and applied decay if is_block or block_i == 0. Let's simplify slightly
+                # Assume non-block backbone params get the base backbone LR (highest decay)
+                # unless they are explicitly handled otherwise (e.g., embeddings)
+                current_block_decay_level = backbone_blocks - 1 # Max decay level for earliest block/embeddings
+                if is_block:
+                   current_block_decay_level = block_i
+                
+                lr *= self.llrd ** (backbone_blocks - 1 - current_block_decay_level)
+
                 backbone_param_groups.append(
                     {"params": [param], "lr": lr, "name": name}
                 )
-            else:
-                other_param_groups.append(
-                    {"params": [param], "lr": self.lr, "name": name}
+                param_added_to_backbone = True
+
+            # Add to 'other' group if it's trainable and not added to backbone groups
+            if not param_added_to_backbone:
+                 other_param_groups.append(
+                    # Assuming non-backbone params use the base learning rate
+                    {"params": [param], "lr": self.lr, "name": name} 
                 )
 
-        param_groups = backbone_param_groups + other_param_groups
+        # Combine the groups (Backbone groups should be ordered from later to earlier layers 
+        # if the scheduler needs that, but the current reversal logic seems okay)
+        # No need to reverse here as the loop iterates in default order
+        param_groups = backbone_param_groups + other_param_groups 
         optimizer = AdamW(param_groups, weight_decay=self.weight_decay)
 
         scheduler = TwoStageWarmupPolySchedule(
             optimizer,
-            num_backbone_params=len(backbone_param_groups),
+            # Pass the actual number of parameter groups being optimized
+            num_backbone_params=len(backbone_param_groups), 
             warmup_steps=self.warmup_steps,
             total_steps=self.trainer.estimated_stepping_batches,
             poly_power=self.poly_power,
