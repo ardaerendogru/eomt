@@ -269,6 +269,11 @@ class LightningModule(lightning.LightningModule):
             [MeanAveragePrecision(iou_type="segm") for _ in range(num_blocks)]
         )
 
+    def init_metrics_detection(self, num_blocks):
+        self.metrics = nn.ModuleList(
+            [MeanAveragePrecision(iou_type="bbox") for _ in range(num_blocks)]
+        )
+
     def init_metrics_panoptic(self, thing_classes, stuff_classes, num_blocks):
         self.metrics = nn.ModuleList(
             [
@@ -294,6 +299,15 @@ class LightningModule(lightning.LightningModule):
 
     @torch.compiler.disable
     def update_metrics_instance(
+        self,
+        preds: list[dict],
+        targets: list[dict],
+        block_idx,
+    ):
+        self.metrics[block_idx].update(preds, targets)
+
+    @torch.compiler.disable
+    def update_metrics_detection(
         self,
         preds: list[dict],
         targets: list[dict],
