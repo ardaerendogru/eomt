@@ -7,7 +7,7 @@
 import timm
 import torch
 import torch.nn as nn
-from peft import LoRA
+from peft import LoRA, PiSSA
 
 class ViT(nn.Module):
     def __init__(
@@ -45,6 +45,8 @@ class ViT(nn.Module):
                 block = self.backbone.blocks[i]
                 qkv_layer = block.attn.qkv # Assuming standard timm naming
                 lora_layer = LoRA(qkv_layer, lora_r=lora_r)
+
+                
                 block.attn.qkv = lora_layer # Replace the original qkv layer
             # Unfreeze parameters in the final blocks (non-LoRA blocks)
             for i in range(num_lora_blocks, total_blocks):

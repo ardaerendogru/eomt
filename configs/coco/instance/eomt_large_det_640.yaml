@@ -8,7 +8,7 @@ trainer:
       project: "eomt"
       name: "coco_instance_eomt_large_640"
 model:
-  class_path: training.mask_classification_instance.MaskClassificationInstance
+  class_path: training.mask_classification_detection_instance.MaskClassificationDetectionInstance
   init_args:
     attn_mask_annealing_enabled: True
     attn_mask_annealing_start_steps: [14782, 29564, 44346, 59128]

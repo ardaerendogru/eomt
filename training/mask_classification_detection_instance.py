@@ -18,7 +18,7 @@ from training.mask_classification_loss import MaskClassificationLoss
 from training.lightning_module import LightningModule
 
 
-class DetectionClassificationInstance(LightningModule):
+class MaskClassificationDetectionInstance(LightningModule):
     def __init__(
         self,
         network: nn.Module,
@@ -81,14 +81,6 @@ class DetectionClassificationInstance(LightningModule):
 
         self.init_metrics_detection(self.network.num_blocks + 1)
 
-        # # Initialize mAP metrics per layer for validation
-        # self.val_map_metrics = nn.ModuleList([
-        #     MeanAveragePrecision(box_format='xyxy')
-        #     for _ in range(self.network.num_blocks + 1)
-        # ])
-        # # TODO: Add similar for test set if needed
-        # # self.test_map_metrics = nn.ModuleList([...])
-
     def eval_step(
         self,
         batch,
@@ -132,15 +124,41 @@ class DetectionClassificationInstance(LightningModule):
                     mask_logits[j].sigmoid().flatten(1) * masks.flatten(1)
                 ).sum(1) / (masks.flatten(1).sum(1) + 1e-6)
                 scores = topk_scores * mask_scores
-                masks = masks_to_boxes(masks)
+
+                # Handle empty masks for predictions
+                valid_boxes = []
+                valid_labels = []
+                valid_scores = []
+                
+                for mask_idx, mask in enumerate(masks):
+                    if mask.sum() > 0:  # Check if mask has any True values
+                        try:
+                            box = masks_to_boxes(mask.unsqueeze(0)).squeeze(0)
+                            valid_boxes.append(box)
+                            valid_labels.append(labels[mask_idx])
+                            valid_scores.append(scores[mask_idx])
+                        except RuntimeError:
+                            continue
+                
+                # Create tensors from lists, or empty tensors if no valid masks
+                if valid_boxes:
+                    pred_boxes = torch.stack(valid_boxes)
+                    pred_labels = torch.stack(valid_labels)
+                    pred_scores = torch.stack(valid_scores)
+                else:
+                    pred_boxes = torch.zeros((0, 4), device=self.device)
+                    pred_labels = torch.zeros(0, dtype=torch.int64, device=self.device)
+                    pred_scores = torch.zeros(0, device=self.device)
+                
                 preds.append(
                     dict(
-                        boxes=masks,
-                        labels=labels,
-                        scores=scores,
+                        boxes=pred_boxes,
+                        labels=pred_labels,
+                        scores=pred_scores,
                     )
                 )
 
+                # For targets, we can directly convert since COCO always has valid boxes
                 target_mask = masks_to_boxes(targets[j]["masks"])
                 targets_.append(
                     dict(
