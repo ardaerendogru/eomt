@@ -147,6 +147,7 @@ def cli_main():
             "devices": 1,
             "gradient_clip_val": 0.01,
             "gradient_clip_algorithm": "norm",
+            "accumulate_grad_batches": 1,
         },
     )
 

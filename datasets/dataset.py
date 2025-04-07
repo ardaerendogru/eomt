@@ -104,6 +104,7 @@ class Dataset(torch.utils.data.Dataset):
         self.labels_by_id = {}
         self.polygons_by_id = {}
         self.is_crowd_by_id = {}
+        self.bbox_by_id = {}  # Initialize bbox dictionary
 
         if annotations_json_path_in_zip is not None:
             with zipfile.ZipFile(target_zip_path or zip_path) as outer_target_zip:
@@ -137,6 +138,9 @@ class Dataset(torch.utils.data.Dataset):
 
                     if img_filename not in self.is_crowd_by_id:
                         self.is_crowd_by_id[img_filename] = {}
+                    
+                    if img_filename not in self.bbox_by_id:
+                        self.bbox_by_id[img_filename] = {}
 
                     self.labels_by_id[img_filename][annotation["id"]] = annotation[
                         "category_id"
@@ -147,6 +151,10 @@ class Dataset(torch.utils.data.Dataset):
                     self.is_crowd_by_id[img_filename][annotation["id"]] = bool(
                         annotation["iscrowd"]
                     )
+                    
+                    # Extract and store bounding box if available
+                    if "bbox" in annotation:
+                        self.bbox_by_id[img_filename][annotation["id"]] = annotation["bbox"]
 
         self.imgs = []
         self.targets = []
@@ -257,7 +265,8 @@ class Dataset(torch.utils.data.Dataset):
                     Image.open(target_instance), dtype=torch.long
                 )
 
-        masks, labels, is_crowd = self.target_parser(
+        # The target_parser in COCODetection returns masks, labels, is_crowd
+        parser_result = self.target_parser(
             target=target,
             target_instance=target_instance,
             stuff_classes=self.stuff_classes,
@@ -266,14 +275,15 @@ class Dataset(torch.utils.data.Dataset):
             is_crowd_by_id=self.is_crowd_by_id.get(Path(self.imgs[index]).name, {}),
             width=img.shape[-1],
             height=img.shape[-2],
+            bbox_by_id=self.bbox_by_id.get(Path(self.imgs[index]).name, {}) if hasattr(self, 'bbox_by_id') else None,
         )
+        
+        # All target_parser implementations return masks, labels, is_crowd
+        masks, labels, is_crowd = parser_result
 
         # Check if the target parser returned empty lists (no valid annotations)
         if not masks: # Check if the masks list is empty
             # Create empty tensors with appropriate shapes and types
-            # Masks: (0, H, W), boolean
-            # Labels: (0,), int64
-            # IsCrowd: (0,), boolean
             h, w = img.shape[-2:]
             target = {
                 "masks": tv_tensors.Mask(torch.empty((0, h, w), dtype=torch.bool)),
@@ -284,8 +294,8 @@ class Dataset(torch.utils.data.Dataset):
             # If annotations exist, stack and convert to tensors
             target = {
                 "masks": tv_tensors.Mask(torch.stack(masks)),
-                "labels": torch.tensor(labels, dtype=torch.int64), # Ensure correct dtype
-                "is_crowd": torch.tensor(is_crowd, dtype=torch.bool), # Ensure correct dtype
+                "labels": torch.tensor(labels, dtype=torch.int64),
+                "is_crowd": torch.tensor(is_crowd, dtype=torch.bool),
             }
 
         if self.transforms is not None:

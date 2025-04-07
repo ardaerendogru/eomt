@@ -19,5 +19,9 @@ model:
         num_q: 200
         encoder:
           class_path: models.vit.ViT
+          init_args:
+            backbone_name: vit_large_patch14_reg4_dinov2
 data:
   class_path: datasets.coco_det.COCODetection
+  init_args:
+    img_size: [640, 640]

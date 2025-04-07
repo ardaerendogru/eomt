@@ -44,7 +44,7 @@ class ViT(nn.Module):
             for i in range(num_lora_blocks):
                 block = self.backbone.blocks[i]
                 qkv_layer = block.attn.qkv # Assuming standard timm naming
-                lora_layer = LoRA(qkv_layer, lora_r=lora_r)
+                lora_layer = PiSSA(qkv_layer, lora_r=lora_r)
 
                 
                 block.attn.qkv = lora_layer # Replace the original qkv layer

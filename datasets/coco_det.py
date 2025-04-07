@@ -33,9 +33,15 @@ COCO_DET_CLASS_MAPPING = {
 
 class COCODetection(LightningDataModule):
     """
-    LightningDataModule for COCO Object Detection, modified to output masks
-    generated from bounding boxes.
+    LightningDataModule for COCO Object Detection.
     Loads images and annotations from COCO dataset structure.
+    
+    The dataset provides:
+    - Images
+    - Object detection annotations as masks:
+      * Converting bounding boxes to rectangular masks
+      * Class labels
+      * Crowd flags
     """
     def __init__(
         self,
@@ -84,6 +90,7 @@ class COCODetection(LightningDataModule):
         is_crowd_by_id: dict[int, bool],
         width: int,
         height: int,
+        bbox_by_id: dict[int, list[float]] = None,  # Add bounding box parameter
         **kwargs
     ):
         masks, labels, is_crowd = [], [], []
@@ -92,14 +99,19 @@ class COCODetection(LightningDataModule):
             if cls_id not in COCO_DET_CLASS_MAPPING:
                 continue
 
-            segmentation = polygons_by_id[label_id]
-            rles = coco_mask.frPyObjects(segmentation, height, width)
-            rle = coco_mask.merge(rles) if isinstance(rles, list) else rles
+            x, y, w, h = bbox_by_id[label_id]
+            # Convert to integer coordinates
+            x1, y1 = round(x), round(y)
+            x2, y2 = round(x + w), round(y + h)
+            
+            # Create empty mask of correct size
+            mask = torch.zeros((height, width), dtype=torch.bool)
+            # Set the rectangular region to True
+            mask[y1:y2, x1:x2] = True
+            masks.append(tv_tensors.Mask(mask))
 
-            masks.append(tv_tensors.Mask(coco_mask.decode(rle), dtype=torch.bool))
             labels.append(COCO_DET_CLASS_MAPPING[cls_id])
             is_crowd.append(is_crowd_by_id[label_id])
-
 
         return masks, labels, is_crowd
 
