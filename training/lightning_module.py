@@ -35,6 +35,7 @@ from torchvision.transforms.v2.functional import pad
 
 from training.two_stage_warmup_poly_schedule import TwoStageWarmupPolySchedule
 
+
 bold_green = "\033[1;32m"
 reset = "\033[0m"
 
@@ -69,9 +70,8 @@ class LightningModule(lightning.LightningModule):
         self.weight_decay = weight_decay
         self.poly_power = poly_power
         self.warmup_steps = warmup_steps
-
         self.strict_loading = False
-
+        
         if ckpt_path:
             ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=True)
 
@@ -86,9 +86,16 @@ class LightningModule(lightning.LightningModule):
                     for k, v in ckpt.items()
                     if "class_head" not in k and "class_predictor" not in k
                 }
+            
+            # ckpt = {
+            #         k.replace('qkv', 'qkv.qkv'): v
+            #         for k, v in ckpt.items()
+                   
+            # }
+
 
             incompatible_keys = self.load_state_dict(ckpt, strict=False)
-
+            print(self.state_dict().keys())
             if incompatible_keys.missing_keys:
                 if not load_ckpt_class_head:
                     missing_keys = [
@@ -100,15 +107,14 @@ class LightningModule(lightning.LightningModule):
                     missing_keys = incompatible_keys.missing_keys
 
                 if missing_keys:
-                    raise ValueError(f"Missing keys: {missing_keys}")
+                    print(f"Missing keys: {missing_keys}")
 
             if incompatible_keys.unexpected_keys:
-                raise ValueError(
-                    f"Unexpected keys: {incompatible_keys.unexpected_keys}"
-                )
+                print(f"Unexpected keys: {incompatible_keys.unexpected_keys}")
 
+        self.network.encoder.apply_lora()
         self.log = torch.compiler.disable(self.log)  # type: ignore
-
+        
     def configure_optimizers(self):
         encoder_param_names = {
             n for n, p in self.network.encoder.backbone.named_parameters() if p.requires_grad

@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "tasks": [
+        {
+            "label": "install dependencies",
+            "type": "shell",
+            "command": "conda activate EoMT",
+            "problemMatcher": []
+        }
+    ],
+    "configurations": [
+        {
+            "name": "Debug EOMT Training",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": [
+                "fit",
+                "-c", "/home/arda/thesis/eomt/configs/ade20k/panoptic/eomt_large_640.yaml",
+                "--trainer.devices", "2",
+                "--data.batch_size", "8",
+                "--data.path", "data",
+                "--model.ckpt_path", "/home/arda/thesis/eomt/checkpoints/COCO_panoptic_640.bin",
+                "--model.load_ckpt_class_head", "False"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "python": "/home/arda/miniconda3/envs/EoMT/bin/python",
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

@@ -178,5 +178,8 @@ cython_debug/
 .pypirc
 
 **/*.ckpt
+**/*.bin
 eomt
 data
+
+!/checkpoints

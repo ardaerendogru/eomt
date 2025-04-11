@@ -12,12 +12,17 @@ model:
     attn_mask_annealing_enabled: True
     attn_mask_annealing_start_steps: [6520, 13040, 19560, 26080]
     attn_mask_annealing_end_steps: [13040, 19560, 26080, 32600]
+
     network:
       class_path: models.eomt.EoMT
       init_args:
         num_q: 200
         encoder:
           class_path: models.vit.ViT
+          init_args:
+            lora_r: 64                                                                                   
+            lora_class: ProLoRA
+            num_lora_free_blocks: 0
 data:
   class_path: datasets.ade20k_panoptic.ADE20KPanoptic
   init_args:

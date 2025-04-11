@@ -16,7 +16,7 @@ from lightning.pytorch import cli
 from lightning.pytorch.callbacks import ModelSummary, LearningRateMonitor
 from lightning.pytorch.loops.training_epoch_loop import _TrainingEpochLoop
 from lightning.pytorch.loops.fetchers import _DataFetcher, _DataLoaderIterDataFetcher
-
+import yaml
 from training.lightning_module import LightningModule
 from datasets.lightning_data_module import LightningDataModule
 import os
@@ -110,6 +110,8 @@ class LightningCLI(cli.LightningCLI):
             "data.init_args.img_size",
             "model.init_args.network.init_args.encoder.init_args.img_size",
         )
+ 
+
 
     def fit(self, model, **kwargs):
         if hasattr(self.trainer.logger.experiment, "log_code"):
@@ -118,6 +120,8 @@ class LightningCLI(cli.LightningCLI):
             self.trainer.logger.experiment.log_code(
                 ".", include_fn=include_fn, exclude_fn=is_gitignored
             )
+
+
 
         self.trainer.fit_loop.epoch_loop._should_check_val_fx = MethodType(
             _should_check_val_fx, self.trainer.fit_loop.epoch_loop
