@@ -15,9 +15,10 @@ class ViT(nn.Module):
         img_size: tuple[int, int],
         patch_size=16,
         backbone_name="vit_large_patch14_reg4_dinov2",
-        lora_class=PiSSA,
-        lora_r=64,
-        num_lora_free_blocks=0,
+        lora_class=None,
+        lora_r=None,
+        lora_alpha=None,
+        num_lora_free_blocks=None,
     ):
         super().__init__()
 
@@ -30,6 +31,7 @@ class ViT(nn.Module):
         )
         self.lora_class = lora_class
         self.lora_r = lora_r
+        self.lora_alpha = lora_alpha
         self.lora_free_blocks = num_lora_free_blocks
         pixel_mean = torch.tensor(self.backbone.default_cfg["mean"]).reshape(
             1, -1, 1, 1
@@ -80,7 +82,7 @@ class ViT(nn.Module):
             for i in range(num_lora_blocks):
                 block = self.backbone.blocks[i]
                 qkv_layer = block.attn.qkv  # Assuming standard timm naming
-                lora_layer = lora_implementation(qkv_layer, lora_r=self.lora_r)
+                lora_layer = lora_implementation(qkv_layer, lora_r=self.lora_r, lora_alpha=self.lora_alpha)
                 block.attn.qkv = lora_layer  # Replace the original qkv layer
                 
             # Unfreeze parameters in the final blocks (non-LoRA blocks)

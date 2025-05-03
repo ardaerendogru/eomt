@@ -26,7 +26,10 @@ def _should_check_val_fx(self: _TrainingEpochLoop, data_fetcher: _DataFetcher) -
     if not self._should_check_val_epoch():
         return False
 
-    is_infinite_dataset = self.trainer.val_check_batch == float("inf")
+    # Use val_check_interval instead of val_check_batch for compatibility with newer Lightning CLI
+    val_check_interval = self.trainer.val_check_interval if hasattr(self.trainer, 'val_check_interval') else None
+
+    is_infinite_dataset = val_check_interval is None # Treat absence of interval like infinite check
     is_last_batch = self.batch_progress.is_last_batch
     if is_last_batch and (
         is_infinite_dataset or isinstance(data_fetcher, _DataLoaderIterDataFetcher)
@@ -36,23 +39,18 @@ def _should_check_val_fx(self: _TrainingEpochLoop, data_fetcher: _DataFetcher) -
     if self.trainer.should_stop and self.trainer.fit_loop._can_stop_early:
         return True
 
-    is_val_check_batch = is_last_batch
+    is_val_check_step = is_last_batch
     if isinstance(self.trainer.limit_train_batches, int) and is_infinite_dataset:
-        is_val_check_batch = (
+        is_val_check_step = (
             self.batch_idx + 1
         ) % self.trainer.limit_train_batches == 0
-    elif self.trainer.val_check_batch != float("inf"):
-        if self.trainer.check_val_every_n_epoch is not None:
-            is_val_check_batch = (
-                self.batch_idx + 1
-            ) % self.trainer.val_check_batch == 0
-        else:
-            # added below to check val based on global steps instead of batches in case of iteration based val check and gradient accumulation
-            is_val_check_batch = (
-                self.global_step
-            ) % self.trainer.val_check_batch == 0 and not self._should_accumulate()
+    elif val_check_interval is not None and val_check_interval > 0:
+        # Check validation based on global steps (iterations)
+        is_val_check_step = (
+            self.global_step % val_check_interval == 0 and not self._should_accumulate()
+        )
 
-    return is_val_check_batch
+    return is_val_check_step
 
 
 class LightningCLI(cli.LightningCLI):
@@ -146,12 +144,14 @@ def cli_main():
             "enable_model_summary": False,
             "callbacks": [
                 ModelSummary(max_depth=3),
-                LearningRateMonitor(logging_interval="epoch"),
+                LearningRateMonitor(logging_interval="step"),
             ],
             "devices": 1,
             "gradient_clip_val": 0.01,
             "gradient_clip_algorithm": "norm",
             "accumulate_grad_batches": 1,
+            "check_val_every_n_epoch": None,
+            "max_epochs": -1,
         },
     )
 

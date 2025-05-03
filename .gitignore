@@ -183,3 +183,23 @@ eomt
 data
 
 !/checkpoints
+
+**/*.csv
+**/*.json
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.gif
+**/*.bmp
+**/*.tiff
+**/*.tif
+**/*.pdf
+**/*.doc
+**/*.docx
+**/*.xls
+**/*.xlsx
+**/*.pth
+**/*.pt
+**/*.pkl
+**/*.txt

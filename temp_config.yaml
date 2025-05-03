@@ -15,7 +15,7 @@ model:
     attn_mask_annealing_start_steps: [833, 1666, 2499, 3332]
     attn_mask_annealing_end_steps: [1666, 2499, 3332, 4165]
     finetuning_type: "all"
-    lr: 1e-4
+    lr: 1.00E-04
     lr_head_multiplier: 1
     network:
       class_path: models.eomt.EoMT

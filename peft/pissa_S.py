@@ -25,24 +25,12 @@ class PiSSA_S(nn.Module):
         U_v, S_v, Vh_v = torch.linalg.svd(v_weight, full_matrices=False)
 
 
-        # Subtract low-rank approximations from original weights
-        with torch.no_grad():
-            self.qkv.weight[:self.dim, :] = q_weight - q_low_rank
-            self.qkv.weight[-self.dim:, :] = v_weight - v_low_rank
-
 
         # Initialize LoRA linear layers
         self.linear_a_q = nn.Linear(self.dim, lora_r, bias=False)
         self.linear_b_q = nn.Linear(lora_r, self.dim, bias=False)
         self.linear_a_v = nn.Linear(self.dim, lora_r, bias=False)
         self.linear_b_v = nn.Linear(lora_r, self.dim, bias=False)
-
-        with torch.no_grad():
-            self.linear_a_q.weight.copy_(torch.diag(torch.sqrt(S_q_r)) @ Vh_q_r)
-            self.linear_b_q.weight.copy_(U_q_r @ torch.diag(torch.sqrt(S_q_r)))
-            
-            self.linear_a_v.weight.copy_(torch.diag(torch.sqrt(S_v_r)) @ Vh_v_r)
-            self.linear_b_v.weight.copy_(U_v_r @ torch.diag(torch.sqrt(S_v_r)))
 
     def forward(self, x) -> torch.Tensor:
         

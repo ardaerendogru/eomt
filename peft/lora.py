@@ -27,7 +27,7 @@ class LoRA(nn.Module):
         self.linear_a_q = nn.Linear(self.dim, lora_r, bias=False)
         self.linear_b_q = nn.Linear(lora_r, self.dim, bias=False)
         self.linear_a_v = nn.Linear(self.dim, lora_r, bias=False)
-        self.linear_b_v = nn.Linear(lora_r, self.dim, bias=False)
+        self.linear_b_v = nn.Linear(    lora_r, self.dim, bias=False)
 
         # Initialize linear_a layers with Kaiming uniform
         nn.init.kaiming_uniform_(self.linear_a_q.weight, a=math.sqrt(5))

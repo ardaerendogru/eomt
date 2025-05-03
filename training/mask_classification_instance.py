@@ -42,6 +42,7 @@ class MaskClassificationInstance(LightningModule):
         eval_top_k_instances: int = 100,
         ckpt_path: Optional[str] = None,
         load_ckpt_class_head: bool = True,
+        finetuning_type: str = "all",
     ):
         super().__init__(
             network=network,
@@ -57,6 +58,7 @@ class MaskClassificationInstance(LightningModule):
             warmup_steps=warmup_steps,
             ckpt_path=ckpt_path,
             load_ckpt_class_head=load_ckpt_class_head,
+            finetuning_type=finetuning_type,
         )
 
         self.save_hyperparameters(ignore=["_class_path"])

@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torchvision.ops import masks_to_boxes  # Added import
 from torchmetrics.detection import MeanAveragePrecision # Added import
 
-from training.mask_classification_loss import MaskClassificationLoss
+from training.mask_detection_loss import MaskDetectionLoss
 from training.lightning_module import LightningModule
 
 
@@ -39,11 +39,15 @@ class MaskClassificationDetectionInstance(LightningModule):
         mask_coefficient: float = 5.0,
         dice_coefficient: float = 5.0,
         class_coefficient: float = 2.0,
+        hd_coefficient: float = 1.0,
+        hd_alpha: float = 2.0,
+        hd_k: int = 10,
         mask_thresh: float = 0.8,
         overlap_thresh: float = 0.8,
         eval_top_k_instances: int = 100,
         ckpt_path: Optional[str] = None,
         load_ckpt_class_head: bool = True,
+        finetuning_type: str = "all",
     ):
         super().__init__(
             network=network,
@@ -59,6 +63,7 @@ class MaskClassificationDetectionInstance(LightningModule):
             warmup_steps=warmup_steps,
             ckpt_path=ckpt_path,
             load_ckpt_class_head=load_ckpt_class_head,
+            finetuning_type=finetuning_type,
         )
 
         self.save_hyperparameters(ignore=["_class_path"])
@@ -68,15 +73,18 @@ class MaskClassificationDetectionInstance(LightningModule):
         self.stuff_classes: List[int] = []
         self.eval_top_k_instances = eval_top_k_instances
 
-        self.criterion = MaskClassificationLoss(
+        self.criterion = MaskDetectionLoss(
             num_points=num_points,
             oversample_ratio=oversample_ratio,
             importance_sample_ratio=importance_sample_ratio,
             mask_coefficient=mask_coefficient,
             dice_coefficient=dice_coefficient,
             class_coefficient=class_coefficient,
+            hd_coefficient=hd_coefficient,
             num_labels=num_classes,
             no_object_coefficient=no_object_coefficient,
+            hd_alpha=hd_alpha,
+            hd_k=hd_k,
         )
 
         self.init_metrics_detection(self.network.num_blocks + 1)

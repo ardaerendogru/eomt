@@ -38,7 +38,7 @@ class MaskClassificationSemantic(LightningModule):
         overlap_thresh: float = 0.8,
         ckpt_path: Optional[str] = None,
         load_ckpt_class_head: bool = True,
-
+        finetuning_type: str = "all",
     ):
         super().__init__(
             network=network,
@@ -54,6 +54,7 @@ class MaskClassificationSemantic(LightningModule):
             warmup_steps=warmup_steps,
             ckpt_path=ckpt_path,
             load_ckpt_class_head=load_ckpt_class_head,
+            finetuning_type=finetuning_type,
         )
 
         self.save_hyperparameters(ignore=["_class_path"])
