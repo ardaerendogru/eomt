@@ -129,7 +129,7 @@ class ADE20KPanoptic(LightningDataModule):
         batch_size: int = 16,
         img_size: tuple[int, int] = (640, 640),
         num_classes: int = 150,
-        color_jitter_enabled=True,
+        color_jitter_enabled=False,
         scale_range=(0.1, 2.0),
         check_empty_targets=True,
     ) -> None:

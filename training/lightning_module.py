@@ -118,7 +118,7 @@ class LightningModule(lightning.LightningModule):
                 
         self.log = torch.compiler.disable(self.log)  # type: ignore
         print(self.network)
-        if finetuning_type == "all":
+        if finetuning_type == "full":
             pass
         elif finetuning_type == "peft":
             self.network.encoder.apply_lora()
@@ -170,6 +170,23 @@ class LightningModule(lightning.LightningModule):
             for i in range(len(self.network.encoder.backbone.blocks)-4,len(self.network.encoder.backbone.blocks)):
                 for param in self.network.encoder.backbone.blocks[i].parameters():
                     param.requires_grad = True   
+        
+        elif finetuning_type == "registers":
+            
+            self._freeze_network()
+            for param in self.network.mask_head.parameters():
+                param.requires_grad = True
+            for param in self.network.class_head.parameters():
+                param.requires_grad = True
+            for param in self.network.upscale.parameters():
+                param.requires_grad = True
+            for param in self.network.q.parameters():
+                param.requires_grad = True
+            
+            self.network.encoder.backbone.cls_token.requires_grad = True
+            self.network.encoder.backbone.pos_embed.requires_grad = True
+            self.network.encoder.backbone.reg_token.requires_grad = True
+
         else:
             raise ValueError(f"Invalid finetuning type: {finetuning_type}")
     

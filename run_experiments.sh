@@ -2,7 +2,7 @@
 
 # Script to run all experiments from the table
 CONFIG_PATH="/home/arda/thesis/eomt/configs/ade20k/panoptic/eomt_large_640.yaml"
-BASE_CMD="python main.py fit -c $CONFIG_PATH --trainer.devices 2 --data.batch_size 8 --data.path data/ade_subsets/1 --model.ckpt_path /home/arda/thesis/eomt/checkpoints/COCO_panoptic_640.bin --model.load_ckpt_class_head False"
+BASE_CMD="python main.py fit -c temp_config.yaml --trainer.devices 2 --data.batch_size 8 --data.path data/ade_subsets/1 --model.ckpt_path /home/arda/thesis/eomt/checkpoints/COCO_panoptic_640.bin --model.load_ckpt_class_head False"
 
 # Function to modify YAML file
 modify_yaml() {
@@ -21,18 +21,24 @@ modify_yaml() {
     echo "Mask Annealing: $mask_annealing, Finetuning Type: $finetuning_type"
     echo "LR: $lr, LR Head Multiplier: $lr_head_multiplier"
 
+    # Construct the experiment name
+    experiment_name="experiment_${id}"
+    echo "Experiment Name: $experiment_name"
+
     # Modify the YAML file
     sed -i "s/attn_mask_annealing_enabled:.*/attn_mask_annealing_enabled: $mask_annealing/" temp_config.yaml
     sed -i "s/finetuning_type:.*/finetuning_type: \"$finetuning_type\"/" temp_config.yaml
     sed -i "s/lr:.*/lr: $lr/" temp_config.yaml
     sed -i "s/lr_head_multiplier:.*/lr_head_multiplier: $lr_head_multiplier/" temp_config.yaml
+    # Modify the experiment name within the YAML under trainer.logger.init_args
+    # Using a marker to handle potential indentation issues
+    sed -i "s/name:.*/name: $experiment_name/" temp_config.yaml
     
     # Remove finetuning_modules if present (since we're using named types)
     sed -i "/finetuning_modules:/d" temp_config.yaml
 
-    # Run the command
-    experiment_name="experiment_${id}"
-    $BASE_CMD --trainer.logger.init_args.name "$experiment_name" --config temp_config.yaml
+    # Run the command - now uses the modified temp_config.yaml directly for the config path
+    $BASE_CMD
     
     # Clean up
     rm temp_config.yaml
@@ -42,10 +48,10 @@ modify_yaml() {
 echo "Starting experiments..."
 
 # ID 1 - All modules enabled
-modify_yaml $CONFIG_PATH "True" "all" "1.00E-04" "1" "1"
+modify_yaml $CONFIG_PATH "True" "all" "1.00E-04" "10" "1"
 
 # ID 2 - No mask annealing, all modules
-modify_yaml $CONFIG_PATH "False" "all" "1.00E-04" "1" "2"
+modify_yaml $CONFIG_PATH "True" "all" "1.00E-04" "1" "2"
 
 # ID 3 - No mask annealing, all modules, LR head multiplier 10
 modify_yaml $CONFIG_PATH "False" "all" "1.00E-04" "10" "3"
@@ -70,7 +76,7 @@ modify_yaml $CONFIG_PATH "False" "qhead" "1.00E-04" "1" "9"
 modify_yaml $CONFIG_PATH "True" "qhead" "1.00E-04" "1" "10"
 
 # ID 11 - Same as 10
-modify_yaml $CONFIG_PATH "True" "qhead" "1.00E-04" "1" "11"
+modify_yaml $CONFIG_PATH "True" "full_head" "1.00E-04" "1" "11"
 
 # ID 12 - Only mask head
 modify_yaml $CONFIG_PATH "True" "MLPs" "1.00E-04" "1" "12"

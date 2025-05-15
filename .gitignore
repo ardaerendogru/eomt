@@ -179,9 +179,8 @@ cython_debug/
 
 **/*.ckpt
 **/*.bin
-eomt
+eomt**
 data
-
 !/checkpoints
 
 **/*.csv

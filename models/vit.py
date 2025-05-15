@@ -7,7 +7,7 @@
 import timm
 import torch
 import torch.nn as nn
-from peft import LoRA, PiSSA, SpecLoRA, ProLoRA
+# from peft import LoRA, PiSSA, SpecLoRA, ProLoRA
 
 class ViT(nn.Module):
     def __init__(

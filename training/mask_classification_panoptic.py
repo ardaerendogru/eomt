@@ -40,6 +40,7 @@ class MaskClassificationPanoptic(LightningModule):
         load_ckpt_class_head: bool = True,
         finetuning_type: str = "all",
         lr_head_multiplier: float = 1.0,
+        save_preds: bool = False,
     ):
         super().__init__(
             network=network,
