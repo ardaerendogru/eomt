@@ -5,7 +5,7 @@ trainer:
     class_path: lightning.pytorch.loggers.wandb.WandbLogger
     init_args:
       resume: allow
-      project: "eomt"
+      project: "eomt_overfit"
       name: "ade20k_panoptic_eomt_large_640"
 model:
   class_path: training.mask_classification_panoptic.MaskClassificationPanoptic

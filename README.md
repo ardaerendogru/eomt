@@ -1,31 +1,22 @@
-# Your ViT is Secretly an Image Segmentation Model (CVPR 2025)
+# Your ViT is Secretly an Image Segmentation Model  
+**CVPR 2025 · Highlight Paper**
 
-*[Tommie Kerssies](https://tommiekerssies.com)¹, [Niccolò Cavagnero](https://scholar.google.com/citations?user=Pr4XHRAAAAAJ)²<sup>,</sup>\*, [Alexander Hermans](https://scholar.google.de/citations?user=V0iMeYsAAAAJ)³, [Narges Norouzi](https://scholar.google.com/citations?user=q7sm490AAAAJ)¹, [Giuseppe Averta](https://www.giuseppeaverta.me/)², [Bastian Leibe](https://scholar.google.com/citations?user=ZcULDB0AAAAJ)³, [Gijs Dubbelman](https://scholar.google.nl/citations?user=wy57br8AAAAJ)¹, [Daan de Geus](https://ddegeus.github.io)¹<sup>,</sup>³*
+**[Tommie Kerssies](https://tommiekerssies.com)¹, [Niccolò Cavagnero](https://scholar.google.com/citations?user=Pr4XHRAAAAAJ)²\*, [Alexander Hermans](https://scholar.google.de/citations?user=V0iMeYsAAAAJ)³, [Narges Norouzi](https://scholar.google.com/citations?user=q7sm490AAAAJ)¹, [Giuseppe Averta](https://www.giuseppeaverta.me/)², [Bastian Leibe](https://scholar.google.com/citations?user=ZcULDB0AAAAJ)³, [Gijs Dubbelman](https://scholar.google.nl/citations?user=wy57br8AAAAJ)¹, [Daan de Geus](https://ddegeus.github.io)¹,³**
 
-<sup>1</sup> Eindhoven University of Technology  
-<sup>2</sup> Polytechnic of Turin  
-<sup>3</sup> RWTH Aachen University  
-<sup>\*</sup> _Work done while visiting RWTH Aachen University._
+¹ Eindhoven University of Technology  
+² Polytechnic of Turin  
+³ RWTH Aachen University  
+\* Work done while visiting RWTH Aachen University
 
-
----
-
-Welcome to the official repository for "**Your ViT is Secretly an Image Segmentation Model**".
-
-📄 **Paper**: [arXiv](https://arxiv.org/abs/2503.19108)  
-👁️ **Project page**: [https://tue-mps.github.io/eomt](https://tue-mps.github.io/eomt)  
-🛎️ **Stay updated**: [Watch the repository](https://github.com/tue-mps/eomt/subscription)  
-🐞 **Questions or issues?** [Open a GitHub issue](https://github.com/tue-mps/eomt/issues)  
-📬 **Contact**: t.kerssies[at]tue[dot]nl
-
----
+📄 **Paper:** [arXiv:2503.19108](https://arxiv.org/abs/2503.19108)
 
 ## Overview
 
-We present the **Encoder-only Mask Transformer** (EoMT), a minimalist image segmentation model that repurposes a plain Vision Transformer to perform segmentation by jointly encoding patch tokens and segmentation queries. No adapters, no decoders, just the ViT.
+We present the **Encoder-only Mask Transformer (EoMT)**, a minimalist image segmentation model that repurposes a plain Vision Transformer (ViT) to jointly encode image patches and segmentation queries as tokens. No adapters. No decoders. Just the ViT.
 
 Leveraging large-scale pre-trained ViTs, EoMT achieves accuracy similar to state-of-the-art methods that rely on complex, task-specific components. At the same time, it is significantly faster thanks to its simplicity, for example up to 4× faster with ViT-L.  
 
+Turns out, *your ViT is secretly an image segmentation model*. EoMT shows that architectural complexity isn’t necessary, plain Transformer power is all you need.
 Turns out, *your ViT is secretly an image segmentation model*. EoMT demonstrates that architectural complexity isn't necessary, plain Transformer power is all you need.
 
 ---
@@ -42,8 +33,8 @@ bash Miniconda3-latest-Linux-x86_64.sh
 Then create the environment, activate it, and install the dependencies:
 
 ```bash
-conda create -n EoMT python==3.12
-conda activate EoMT
+conda create -n eomt python==3.13.2
+conda activate eomt
 python3 -m pip install -r requirements.txt
 ```
 
@@ -52,8 +43,6 @@ python3 -m pip install -r requirements.txt
 ```bash
 wandb login
 ```
-
----
 
 ## Data preparation
 
@@ -88,8 +77,6 @@ wget --load-cookies cookies.txt --content-disposition https://www.cityscapes-dat
 ```
 
 🔧 Replace `<your_username>` and `<your_password>` with your actual [Cityscapes](https://www.cityscapes-dataset.com/) login credentials.  
-
----
 
 ## Usage
 
@@ -129,6 +116,7 @@ To evaluate a pre-trained EoMT model, run:
 ```bash
 python3 main.py validate \
   -c configs/coco/panoptic/eomt_large_640.yaml \
+  --model.network.masked_attn_enabled False \
   --trainer.devices 4 \
   --data.batch_size 4 \
   --data.path /path/to/dataset \
@@ -140,9 +128,7 @@ This command evaluates the same `EoMT-L` model using 4 GPUs with a batch size of
 🔧 Replace `/path/to/dataset` with the directory containing the dataset zip files.  
 🔧 Replace `/path/to/pytorch_model.bin` with the path to the checkpoint to evaluate.
 
-A [notebook](inference.ipynb) is also available for quick inference and visualization with pre-trained models.
-
----
+A [notebook](inference.ipynb) is available for quick inference and visualization with auto-downloaded pre-trained models.
 
 ## Model Zoo
 
@@ -307,8 +293,6 @@ A [notebook](inference.ipynb) is also available for quick inference and visualiz
 
 *<sub>\* mAP reported using pycocotools; TorchMetrics (used by default) yields ~0.7 lower.</sub>*
 
----
-
 ## Citation
 If you find this work useful in your research, please cite it using the BibTeX entry below:
 
@@ -316,12 +300,10 @@ If you find this work useful in your research, please cite it using the BibTeX e
 @inproceedings{kerssies2025eomt,
   author    = {Kerssies, Tommie and Cavagnero, Niccolò and Hermans, Alexander and Norouzi, Narges and Averta, Giuseppe and Leibe, Bastian and Dubbelman, Gijs and de Geus, Daan},
   title     = {Your ViT is Secretly an Image Segmentation Model},
-  booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
   year      = {2025},
 }
 ```
-
----
 
 ## Acknowledgements
 
@@ -333,6 +315,7 @@ This project builds upon code from the following libraries and repositories:
 - [TorchMetrics](https://github.com/Lightning-AI/torchmetrics) (Apache-2.0 License)  
 - [Mask2Former](https://github.com/facebookresearch/Mask2Former) (Apache-2.0 License)
 - [Detectron2](https://github.com/facebookresearch/detectron2) (Apache-2.0 License)
+
 
 # Model Comparison Visualizer
 

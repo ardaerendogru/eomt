@@ -1,3 +1,5 @@
+*.ckpt
+
 _site/
 lightning_logs/
 wandb/
@@ -202,3 +204,9 @@ data
 **/*.pt
 **/*.pkl
 **/*.txt
+
+.gradio
+
+**/*.pem
+
+.**

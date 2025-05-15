@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------
 # © 2025 Mobile Perception Systems Lab at TU/e. All rights reserved.
 # Licensed under the MIT License.
-# 
+#
 # Portions of this file are adapted from the timm library by Ross Wightman,
 # used under the Apache 2.0 License.
 # ---------------------------------------------------------------
@@ -41,7 +41,7 @@ class EoMT(nn.Module):
         self.lora_layers = lora_layers
         self.q = nn.Embedding(num_q, self.encoder.backbone.embed_dim)
 
-        # self.class_head = nn.Linear(self.encoder.backbone.embed_dim, num_classes + 1)
+        self.class_head = nn.Linear(self.encoder.backbone.embed_dim, num_classes + 1)
         
         self.mask_head = nn.Sequential(
             nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
@@ -52,13 +52,13 @@ class EoMT(nn.Module):
         )
 
 
-        self.class_head = nn.Sequential(
-            nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
-            nn.GELU(),
-            nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
-            nn.GELU(),
-            nn.Linear(self.encoder.backbone.embed_dim, num_classes + 1),
-        )
+        # self.class_head = nn.Sequential(
+        #     nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
+        #     nn.GELU(),
+        #     nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
+        #     nn.GELU(),
+        #     nn.Linear(self.encoder.backbone.embed_dim, num_classes + 1),
+        # )
         # embed_dim = self.encoder.backbone.embed_dim
         # self.mask_head = nn.Sequential(
         #     nn.Linear(embed_dim, embed_dim * 2),
@@ -94,6 +94,7 @@ class EoMT(nn.Module):
 
         return mask_logits, class_logits
 
+    @torch.compiler.disable
     def _disable_attn_mask(self, attn_mask, prob):
         if prob < 1:
             random_queries = (
@@ -117,8 +118,8 @@ class EoMT(nn.Module):
             mask = mask[:, None, ...].expand(-1, module.num_heads, -1, -1)
 
         # Force dropout to be zero regardless of training mode
-        #dropout_p = module.attn_drop.p if self.training else 0.0
-        dropout_p = 0.0
+        dropout_p = module.attn_drop.p if self.training else 0.0
+        # dropout_p = 0.0
 
         if module.fused_attn:
             x = F.scaled_dot_product_attention(q, k, v, mask, dropout_p)
@@ -128,12 +129,12 @@ class EoMT(nn.Module):
                 attn = attn.masked_fill(~mask, float("-inf"))
             attn = F.softmax(attn, dim=-1)
             # Skip dropout completely
-            # attn = module.attn_drop(attn)
+            attn = module.attn_drop(attn)
             x = attn @ v
 
         # Skip projection dropout
         x = module.proj(x.transpose(1, 2).reshape(B, N, C))
-        # x = module.proj_drop(module.proj(x.transpose(1, 2).reshape(B, N, C)))
+        x = module.proj_drop(module.proj(x.transpose(1, 2).reshape(B, N, C)))
 
         return x
 

@@ -78,7 +78,7 @@ class MaskClassificationPanoptic(LightningModule):
 
         thing_classes = [i for i in range(num_classes) if i not in stuff_classes]
         self.init_metrics_panoptic(
-            thing_classes, stuff_classes, self.network.num_blocks + 1
+            thing_classes, stuff_classes, self.network.num_blocks + 1 if self.network.masked_attn_enabled else 1
         )
 
     def eval_step(
