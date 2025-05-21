@@ -13,7 +13,7 @@ import torch.nn.functional as F
 import math
 
 from models.scale_block import ScaleBlock
-# from peft import LoRA, PiSSA, SpecLoRA, ProLoRA
+
 
 class EoMT(nn.Module):
     def __init__(
@@ -23,26 +23,19 @@ class EoMT(nn.Module):
         num_q,
         num_blocks=4,
         masked_attn_enabled=True,
-        lora_class=None,
-        lora_r=None,
-        num_lora_free_blocks=None,
-        lora_layers=None,
-        lora_alpha=None,
     ):
         super().__init__()
         self.encoder = encoder
         self.num_q = num_q
         self.num_blocks = num_blocks
         self.masked_attn_enabled = masked_attn_enabled
+
         self.register_buffer("attn_mask_probs", torch.ones(num_blocks))
-        self.lora_class = lora_class
-        self.lora_r = lora_r
-        self.lora_free_blocks = num_lora_free_blocks
-        self.lora_layers = lora_layers
+
         self.q = nn.Embedding(num_q, self.encoder.backbone.embed_dim)
 
         self.class_head = nn.Linear(self.encoder.backbone.embed_dim, num_classes + 1)
-        
+
         self.mask_head = nn.Sequential(
             nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
             nn.GELU(),
@@ -51,24 +44,6 @@ class EoMT(nn.Module):
             nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
         )
 
-
-        # self.class_head = nn.Sequential(
-        #     nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
-        #     nn.GELU(),
-        #     nn.Linear(self.encoder.backbone.embed_dim, self.encoder.backbone.embed_dim),
-        #     nn.GELU(),
-        #     nn.Linear(self.encoder.backbone.embed_dim, num_classes + 1),
-        # )
-        # embed_dim = self.encoder.backbone.embed_dim
-        # self.mask_head = nn.Sequential(
-        #     nn.Linear(embed_dim, embed_dim * 2),
-        #     nn.GELU(),
-        #     nn.Linear(embed_dim * 2, embed_dim * 2),
-        #     nn.GELU(),
-        #     nn.Linear(embed_dim * 2, embed_dim * 2),
-        #     nn.GELU(),
-        #     nn.Linear(embed_dim * 2, embed_dim),
-        # )
         patch_size = encoder.backbone.patch_embed.patch_size
         max_patch_size = max(patch_size[0], patch_size[1])
         num_upscale = max(1, int(math.log2(max_patch_size)) - 2)
@@ -76,7 +51,6 @@ class EoMT(nn.Module):
         self.upscale = nn.Sequential(
             *[ScaleBlock(self.encoder.backbone.embed_dim) for _ in range(num_upscale)],
         )
-
 
     def _predict(self, x: torch.Tensor):
         q = x[:, : self.num_q, :]
@@ -117,9 +91,7 @@ class EoMT(nn.Module):
         if mask is not None:
             mask = mask[:, None, ...].expand(-1, module.num_heads, -1, -1)
 
-        # Force dropout to be zero regardless of training mode
         dropout_p = module.attn_drop.p if self.training else 0.0
-        # dropout_p = 0.0
 
         if module.fused_attn:
             x = F.scaled_dot_product_attention(q, k, v, mask, dropout_p)
@@ -128,12 +100,9 @@ class EoMT(nn.Module):
             if mask is not None:
                 attn = attn.masked_fill(~mask, float("-inf"))
             attn = F.softmax(attn, dim=-1)
-            # Skip dropout completely
             attn = module.attn_drop(attn)
             x = attn @ v
 
-        # Skip projection dropout
-        # x = module.proj(x.transpose(1, 2).reshape(B, N, C))
         x = module.proj_drop(module.proj(x.transpose(1, 2).reshape(B, N, C)))
 
         return x
@@ -205,5 +174,3 @@ class EoMT(nn.Module):
             mask_logits_per_layer,
             class_logits_per_layer,
         )
-    
-    

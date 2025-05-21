@@ -15,6 +15,8 @@ from matplotlib.patches import Patch
 import matplotlib.patheffects as path_effects
 import csv
 import json
+from typing import Optional, cast
+
 from torchmetrics.detection import PanopticQuality
 from torchmetrics.functional.detection._panoptic_quality_common import (
     _prepocess_inputs,
@@ -22,6 +24,10 @@ from torchmetrics.functional.detection._panoptic_quality_common import (
     _get_color_areas,
     _calculate_iou,
 )
+
+# Terminal colors for print statements
+bold_green = "\033[1;32m"
+reset = "\033[0m"
 
 # Custom JSON Encoder to handle Tensors and NumPy types
 class CustomEncoder(json.JSONEncoder):
@@ -599,8 +605,8 @@ def infer_panoptic_batch(model, batch_imgs, batch_targets, device):
 
 def calculate_metrics_panoptic(pred, target, is_crowd, thing_classes, stuff_classes, cuda=False):
     """
-    Calculate PQ metrics using optimized approach from LightningModule.
-    Returns dict with overall metrics and per-class metrics.
+    Calculate PQ metrics using the EXACT implementation from lightning_module.py.
+    Directly copied from update_metrics_panoptic function.
     
     Args:
         pred: Prediction tensor of shape [H,W,2] with semantic and instance IDs
@@ -613,15 +619,6 @@ def calculate_metrics_panoptic(pred, target, is_crowd, thing_classes, stuff_clas
     Returns:
         Dict with metrics: overall_pq, overall_sq, overall_rq and per-class metrics
     """
-    # Create PQ metric
-    pq_metric = PanopticQuality(
-        thing_classes,
-        stuff_classes + [150],
-        return_sq_and_rq=True,
-        return_per_class=True,
-        allow_unknown_preds_category=True
-    )
-    
     # Convert numpy arrays to tensors if needed
     if isinstance(pred, np.ndarray):
         pred = torch.from_numpy(pred).long()
@@ -635,236 +632,188 @@ def calculate_metrics_panoptic(pred, target, is_crowd, thing_classes, stuff_clas
         if len(target.shape) == 3:  # H,W,2
             target = target.unsqueeze(0)
     
-    # Move tensors to GPU if requested
+    # Ensure device consistency
     if cuda and torch.cuda.is_available():
-        pred = pred.cuda()
-        target = target.cuda()
-        if isinstance(is_crowd, torch.Tensor):
-            is_crowd = is_crowd.cuda()
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
     
-    # Now that pred is a tensor, get its device
-    current_device = pred.device
+    # Move inputs to target device
+    pred = pred.to(device)
+    target = target.to(device)
+    if isinstance(is_crowd, torch.Tensor):
+        is_crowd = is_crowd.to(device)
     
-    # Move pq_metric to the same device as the input tensors
-    pq_metric = pq_metric.to(current_device)
+    # Create metric exactly as in lightning_module.py
+    pq_metric = PanopticQuality(
+        thing_classes,
+        stuff_classes,
+        return_sq_and_rq=True,
+        return_per_class=True,
+    ).to(device)
     
-    # Process inputs
-    flatten_pred = _prepocess_inputs(
-        pq_metric.things,
-        pq_metric.stuffs,
-        pred,
-        pq_metric.void_color,
-        pq_metric.allow_unknown_preds_category,
-    )[0]
+    # Reset the metric counters
+    for cls_id in range(len(pq_metric.true_positives)):
+        pq_metric.true_positives[cls_id] = 0
+        pq_metric.false_positives[cls_id] = 0
+        pq_metric.false_negatives[cls_id] = 0
+        pq_metric.iou_sum[cls_id] = 0.0
     
-    flatten_target = _prepocess_inputs(
-        pq_metric.things,
-        pq_metric.stuffs,   
-        target,
-        pq_metric.void_color,
-        True,
-    )[0]
-
-    # Get areas - these operations are faster on GPU
-    pred_areas = _get_color_areas(flatten_pred)
-    target_areas = _get_color_areas(flatten_target)
-    
-
-    intersection_matrix = torch.transpose(
-        torch.stack((flatten_pred, flatten_target), -1), -1, -2
-    )
-    intersection_areas = _get_color_areas(intersection_matrix)
-
-    # Initialize tracking
-    pred_segment_matched = set()
-    target_segment_matched = set()
-    
-    # Determine all classes the model is configured for
-    all_configured_classes = set(pq_metric.things).union(set(pq_metric.stuffs))
-    
-    # Track metrics per class
-    classes_in_target = set()
-    for target_color in target_areas:
-        class_id = target_color[0]
-        # Only consider classes that are part of the configured model classes
-        if class_id in all_configured_classes:
-                classes_in_target.add(class_id)
-        else:
-            classes_in_target.add('void')
-    
-    # Initialize tracking dictionaries
-    # For TP, FN, IoU Sum - scope to classes present in the current target image
-    tp_per_target_class = {cls_id: 0 for cls_id in classes_in_target}
-    fn_per_target_class = {cls_id: 0 for cls_id in classes_in_target}
-    iou_sum_per_target_class = {cls_id: 0.0 for cls_id in classes_in_target}
-
-    # For FP - scope to all classes the model could predict
-    fp_per_configured_class = {cls_id: 0 for cls_id in all_configured_classes}
-
-    # Process true positives and calculate IoU values - optimized loop
-    # Pre-filter intersection pairs for better performance
-    for pred_color, target_color in intersection_areas:
-        if is_crowd[target_color[1]]:
-            continue
-        if target_color == pq_metric.void_color:
-            continue
-        if pred_color[0] != target_color[0]:
-            continue
-
-        class_id = target_color[0] # This class_id is from the target.
-        # Calculate IoU - this is the most expensive operation
-        iou = _calculate_iou(
-            pred_color,
-            target_color,
-            pred_areas,
-            target_areas,
-            intersection_areas,
+    # DIRECT COPY FROM lightning_module.py update_metrics_panoptic (adapted to use pq_metric)
+    for i in range(len(pred)):
+        flatten_pred = _prepocess_inputs(
+            pq_metric.things,
+            pq_metric.stuffs,
+            pred[i:i+1],
             pq_metric.void_color,
+            pq_metric.allow_unknown_preds_category,
+        )[0]
+        
+        flatten_target = _prepocess_inputs(
+            pq_metric.things,
+            pq_metric.stuffs,
+            target[i:i+1],
+            pq_metric.void_color,
+            True,
+        )[0]
+
+        pred_areas = cast(
+            dict[_Color, torch.Tensor], _get_color_areas(flatten_pred)
+        )
+        target_areas = cast(
+            dict[_Color, torch.Tensor], _get_color_areas(flatten_target)
         )
         
-        # Count as match if IoU > 0.5
-        if iou > 0.5:
-            pred_segment_matched.add(pred_color)
-            target_segment_matched.add(target_color)
-            # Only add to TP and IoU sum if the class was actually in the target for this image
-            if class_id in tp_per_target_class:
-                tp_per_target_class[class_id] += 1
-                iou_sum_per_target_class[class_id] += iou
-
-    # Handle false positives and negatives - we can move these sets to CPU for processing
-    false_negative_colors = set(target_areas) - target_segment_matched
-    false_positive_colors = set(pred_areas) - pred_segment_matched
-    
-    # Remove void pixels from errors
-    false_negative_colors.discard(pq_metric.void_color)
-    false_positive_colors.discard(pq_metric.void_color)
-    
-    # Count false negatives - process in bulk where possible
-
-    crowd_by_cat_id = {}
-    for false_negative_color in false_negative_colors:
-        # Skip crowd regions
-        if is_crowd[false_negative_color[1]]:
-            crowd_by_cat_id[false_negative_color[0]] = false_negative_color[1]
-            continue
-        
-        class_id = false_negative_color[0]
-        # FNs are by definition for classes that were in the target
-        if class_id in fn_per_target_class:
-            fn_per_target_class[class_id] += 1
-    
-    # Process false positives - count for any configured class
-    # Iterate over a copy of the set as we might modify it
-    for false_positive_color in list(false_positive_colors): 
-        pred_void_crowd_area = intersection_areas.get(
-            (false_positive_color, pq_metric.void_color), 0
+        intersection_matrix = torch.transpose(
+            torch.stack((flatten_pred, flatten_target), -1), -1, -2
         )
+        intersection_areas = cast(
+            dict[tuple[_Color, _Color], torch.Tensor],
+            _get_color_areas(intersection_matrix),
+        )
+
+        pred_segment_matched = set()
+        target_segment_matched = set()
         
-        # Check if this FP's class was a crowd in the target (identified during FN processing)
-        # and add its overlap with that specific crowd instance.
-        if false_positive_color[0] in crowd_by_cat_id:
-            # Construct the _Color tuple for the crowd instance of the same class
-            # The instance ID for crowd is stored in crowd_by_cat_id
-            crowd_instance_id = crowd_by_cat_id[false_positive_color[0]]
-            target_crowd_color_for_fp_class = (false_positive_color[0], crowd_instance_id)
+        for pred_color, target_color in intersection_areas:
+            if isinstance(is_crowd, torch.Tensor) and is_crowd.numel() > target_color[1] and is_crowd[target_color[1]]:
+                continue
+            if target_color == pq_metric.void_color:
+                continue
+            if pred_color[0] != target_color[0]:
+                continue
             
-            pred_void_crowd_area += intersection_areas.get(
-                (false_positive_color, target_crowd_color_for_fp_class), 0
+            iou = _calculate_iou(
+                pred_color,
+                target_color,
+                pred_areas,
+                target_areas,
+                intersection_areas,
+                pq_metric.void_color,
             )
             
-        # If the FP segment overlaps by more than 50% with void or relevant crowd areas, discard it.
-        # Ensure pred_areas[false_positive_color] is not zero to avoid division by zero.
-        if false_positive_color in pred_areas and pred_areas[false_positive_color] > 0:
-            if pred_void_crowd_area / pred_areas[false_positive_color] > 0.5:
-                false_positive_colors.discard(false_positive_color)
-                continue # Move to next false_positive_color if this one is discarded
-        elif false_positive_color not in pred_areas: # Should not happen if pred_areas is comprehensive
-            # Handle case where false_positive_color might not be in pred_areas (defensive)
-            # This could indicate an issue with pred_areas population or false_positive_colors set.
-            # For now, we'll not discard if area is unknown, but this might need review.
-            pass
+            continuous_id = pq_metric.cat_id_to_continuous_id[target_color[0]]
+            if iou > 0.5:
+                pred_segment_matched.add(pred_color)
+                target_segment_matched.add(target_color)
+                pq_metric.iou_sum[continuous_id] += iou
+                pq_metric.true_positives[continuous_id] += 1
 
-    # After filtering, count the remaining false positives
-    for fp_color in false_positive_colors: # Iterate the filtered set
-        class_id = fp_color[0]
-        # This FP belongs to class_id, regardless of whether class_id was in target
-        # Update the count for configured classes (for per-class metrics)
-        if class_id in fp_per_configured_class:
-            fp_per_configured_class[class_id] += 1
+        false_negative_colors = set(target_areas) - target_segment_matched
+        false_positive_colors = set(pred_areas) - pred_segment_matched
+
+        false_negative_colors.discard(pq_metric.void_color)
+        false_positive_colors.discard(pq_metric.void_color)
+
+        for target_color in list(false_negative_colors):
+            void_target_area = intersection_areas.get(
+                (pq_metric.void_color, target_color), 0
+            )
+            if void_target_area / target_areas[target_color] > 0.5:
+                false_negative_colors.discard(target_color)
+
+        crowd_by_cat_id = {}
+        for false_negative_color in false_negative_colors:
+            if isinstance(is_crowd, torch.Tensor) and is_crowd.numel() > false_negative_color[1] and is_crowd[false_negative_color[1]]:
+                crowd_by_cat_id[false_negative_color[0]] = false_negative_color[1]
+                continue
+
+            continuous_id = pq_metric.cat_id_to_continuous_id[false_negative_color[0]]
+            pq_metric.false_negatives[continuous_id] += 1
+
+        for pred_color in list(false_positive_colors):
+            pred_void_crowd_area = intersection_areas.get(
+                (pred_color, pq_metric.void_color), 0
+            )
+
+            if pred_color[0] in crowd_by_cat_id:
+                crowd_color = (pred_color[0], crowd_by_cat_id[pred_color[0]])
+                pred_void_crowd_area += intersection_areas.get(
+                    (pred_color, crowd_color), 0
+                )
+
+            if pred_void_crowd_area / pred_areas[pred_color] > 0.5:
+                false_positive_colors.discard(pred_color)
+
+        for false_positive_color in false_positive_colors:
+            continuous_id = pq_metric.cat_id_to_continuous_id[false_positive_color[0]]
+            pq_metric.false_positives[continuous_id] += 1
     
-    # Calculate metrics - count all FPs that weren't filtered
-    total_tp = sum(tp_per_target_class.values())
-    total_fp = sum(fp_per_configured_class.values())  # Count ALL remaining FPs
-    total_fn = sum(fn_per_target_class.values())
-    total_iou = sum(iou_sum_per_target_class.values())
+    # This matches _on_eval_epoch_end_panoptic exactly
+    # CRUCIAL: slice [:-1] removes the background class from metrics
+    result = pq_metric.compute()[:-1]
     
-    # Calculate overall PQ, SQ, RQ
-    overall_sq = total_iou / total_tp if total_tp > 0 else 0.0
-    # Standard torchmetrics PQ uses: TP / (TP + 0.5 * FP + 0.5 * FN)
-    overall_rq_denominator = total_tp + 0.5 * total_fp + 0.5 * total_fn
-    overall_rq = total_tp / overall_rq_denominator if overall_rq_denominator > 0 else 0.0
-    overall_pq = overall_sq * overall_rq
+    # Extract metrics from tensor
+    pq, sq, rq = result[:, 0], result[:, 1], result[:, 2]
     
-    # Calculate per-class PQ, SQ, RQ
-    # Iterate over all configured classes for a full report, or just classes_in_target for image-specific report
-    # Current output seems to be for classes_in_target, which is fine for per-image JSON.
-    # If aggregating later, one might want all configured classes.
+    # Calculate overall metrics exactly as in lightning_module.py
+    overall_pq = float(pq.cpu().mean())
+    overall_sq = float(sq.cpu().mean())
+    overall_rq = float(rq.cpu().mean())
+    
+    # Create per-class dictionaries
     pq_per_class_dict = {}
     sq_per_class_dict = {}
     rq_per_class_dict = {}
     
-    # Report per-class metrics for classes that were in the target for this image
-    # OR for any class that had a TP, FP, or FN.
-    # For consistency with overall, let's consider all configured classes that might have TP, FP, or FN.
+    # For consistent accumulation of total counts
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
+    total_iou_sum = 0
     
-    # Let's iterate over all configured classes to ensure FPs for classes not in target are handled if we want to report their RQ as 0.
-    # However, the Gradio app displays per-class metrics based on what's in METRIC_RESULTS[image_pred_key]['per_class_pq'],
-    # which implies we should report for classes that *could* have a metric.
-    
-    # Sticking to classes_in_target for this specific per-image output is reasonable if the expectation
-    # is that a class not in target won't have per-class metrics listed for that image,
-    # but its FPs *must* still affect the overall PQ.
-    # For a more complete per-class report, one might iterate `all_configured_classes`.
-    # The current Gradio app expects keys based on class_names[cls_id] from the items in metrics["per_class_pq"].items().
-    # This means cls_id should be from the actual classes that have values.
-
-    reportable_classes = classes_in_target.union(set(k for k,v in fp_per_configured_class.items() if v > 0))
-
-
-    for cls_id in reportable_classes: # Consider all classes that had any activity (TP, FN from target, or FP from prediction)
-        if cls_id not in all_configured_classes: # Should not happen if reportable_classes logic is sound
+    # Extract class-level metrics excluding background
+    for idx, cls_id in enumerate(pq_metric.cat_id_to_continuous_id.keys()):
+        if cls_id == stuff_classes[-1]:  # Skip background class (last stuff class)
             continue
-
-        tp = tp_per_target_class.get(cls_id, 0)
-        fp = fp_per_configured_class.get(cls_id, 0) # Get FPs for this class from the comprehensive FP count
-        fn = fn_per_target_class.get(cls_id, 0)
-        class_iou = iou_sum_per_target_class.get(cls_id, 0.0)
         
-        sq = class_iou / tp if tp > 0 else 0.0
+        if idx >= len(pq):  # Skip if out of bounds
+            continue
+            
+        # Get class metrics
+        pq_per_class_dict[int(cls_id)] = float(pq[idx].cpu())
+        sq_per_class_dict[int(cls_id)] = float(sq[idx].cpu())
+        rq_per_class_dict[int(cls_id)] = float(rq[idx].cpu())
         
-        rq_denominator = tp + 0.5 * fp + 0.5 * fn
-        rq = tp / rq_denominator if rq_denominator > 0 else 0.0
-        
-        pq = sq * rq
-        
-        # Only add to dict if there's some activity (TP, FP, or FN > 0) to avoid zero entries for all classes
-        if tp > 0 or fp > 0 or fn > 0:
-            pq_per_class_dict[int(cls_id)] = float(pq)
-            sq_per_class_dict[int(cls_id)] = float(sq)
-            rq_per_class_dict[int(cls_id)] = float(rq)
+        # Accumulate counts for dataset metrics
+        continuous_id = pq_metric.cat_id_to_continuous_id[cls_id]
+        total_tp += pq_metric.true_positives[continuous_id].cpu().item()
+        total_fp += pq_metric.false_positives[continuous_id].cpu().item()
+        total_fn += pq_metric.false_negatives[continuous_id].cpu().item()
+        total_iou_sum += pq_metric.iou_sum[continuous_id].cpu().item()
     
-    # Return all metrics
+    # Return metrics dictionary
     return {
-        "overall_pq": float(overall_pq),
-        "overall_sq": float(overall_sq),
-        "overall_rq": float(overall_rq),
+        "overall_pq": overall_pq,
+        "overall_sq": overall_sq,
+        "overall_rq": overall_rq,
         "per_class_pq": pq_per_class_dict,
         "per_class_sq": sq_per_class_dict,
         "per_class_rq": rq_per_class_dict,
         "total_tp": total_tp,
         "total_fp": total_fp,
         "total_fn": total_fn,
-        "total_iou_sum": total_iou
+        "total_iou_sum": total_iou_sum
     }
 
 def main():
@@ -1079,7 +1028,7 @@ def main():
                         # Get stuff/thing classes
                         stuff_classes = current_model.stuff_classes if hasattr(current_model, 'stuff_classes') else []
                         # Important: Add model.num_classes to stuff_classes like in the codebase init_metrics_panoptic
-                        stuff_classes = stuff_classes 
+                        stuff_classes = stuff_classes + [current_model.num_classes]
                         thing_classes = [i for i in range(current_model.num_classes) if i not in stuff_classes]
                         
                         # Stack pred and target tensors
@@ -1145,6 +1094,12 @@ def main():
             "dataset_overall_rq": dataset_rq,
             "dataset_overall_pq": dataset_pq
         }
+        
+        # IMPORTANT: To match lightning_module.py PQ calculation, also log the raw values here
+        # and print them directly as they will be most comparable to the reference values
+        # since lightning_module.py excludes the background class (150) from metrics
+        print(f"{bold_green}Dataset-level metrics for {current_exp_key}:{reset}")
+        print(f"PQ: {dataset_pq * 100:.2f}% | SQ: {dataset_sq * 100:.2f}% | RQ: {dataset_rq * 100:.2f}%")
     
     # Save instance counts and PQ to JSON after all images are processed
     json_path = os.path.join(args.output_dir, "instance_counts.json")
@@ -1173,4 +1128,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # main()

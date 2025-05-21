@@ -100,12 +100,12 @@ class Transforms(nn.Module):
             "labels": target["labels"][~target["is_crowd"]].clone(),
         }
 
-        # if self.color_jitter_enabled:
-        #     img_ = self.color_jitter(img_)
+        if self.color_jitter_enabled:
+            img_ = self.color_jitter(img_)
 
-        # img_, target_ = self.random_horizontal_flip(img_, target)
+        img_, target_ = self.random_horizontal_flip(img_, target)
 
-        # img_, target_ = self.scale_jitter(img_, target_)
+        img_, target_ = self.scale_jitter(img_, target_)
 
         img_, target_ = self.pad(img_, target_)
 

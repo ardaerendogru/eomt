@@ -1,15 +1,16 @@
 trainer:
-  max_epochs: 5000
+  max_epochs: 20000
   check_val_every_n_epoch: 1000
   logger:
     class_path: lightning.pytorch.loggers.wandb.WandbLogger
     init_args:
       resume: allow
-      project: "eomt"
+      project: "eomt_overfit"
       name: "ade20k_panoptic_eomt_large_640"
 model:
   class_path: training.mask_classification_panoptic.MaskClassificationPanoptic
   init_args:
+    # ckpt_path: /home/arda/thesis/eomt/checkpoints/COCO_panoptic_640.bin
     attn_mask_annealing_enabled: False
     attn_mask_annealing_start_steps: [6520, 13040, 19560, 26080]
     attn_mask_annealing_end_steps: [13040, 19560, 26080, 32600]
