@@ -312,5 +312,3 @@ This project builds upon code from the following libraries and repositories:
 - [TorchMetrics](https://github.com/Lightning-AI/torchmetrics) (Apache-2.0 License)  
 - [Mask2Former](https://github.com/facebookresearch/Mask2Former) (Apache-2.0 License)
 - [Detectron2](https://github.com/facebookresearch/detectron2) (Apache-2.0 License)
-# Test comment
-# Test commentx
