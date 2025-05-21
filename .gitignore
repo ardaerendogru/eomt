@@ -1,3 +1,5 @@
+*.ckpt
+
 _site/
 lightning_logs/
 wandb/

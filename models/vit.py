@@ -4,6 +4,7 @@
 # ---------------------------------------------------------------
 
 
+from typing import Optional
 import timm
 import torch
 import torch.nn as nn
@@ -24,7 +25,7 @@ class ViT(nn.Module):
 
         self.backbone = timm.create_model(
             backbone_name,
-            pretrained=True,
+            pretrained=ckpt_path is None,
             img_size=img_size,
             patch_size=patch_size,
             num_classes=0,

@@ -47,6 +47,29 @@ _t.raise_unexpected_value = _raise_single
 _t.raise_union_unexpected_value = _raise_union
 
 
+_orig_single = _t.raise_unexpected_value
+
+
+def _raise_single(*args, exception=None, **kwargs):
+    if isinstance(exception, Exception):
+        raise exception
+    return _orig_single(*args, exception=exception, **kwargs)
+
+
+_orig_union = _t.raise_union_unexpected_value
+
+
+def _raise_union(subtypes, val, vals):
+    for e in reversed(vals):
+        if isinstance(e, Exception):
+            raise e
+    return _orig_union(subtypes, val, vals)
+
+
+_t.raise_unexpected_value = _raise_single
+_t.raise_union_unexpected_value = _raise_union
+
+
 def _should_check_val_fx(self: _TrainingEpochLoop, data_fetcher: _DataFetcher) -> bool:
     if not self._should_check_val_epoch():
         return False
@@ -103,11 +126,7 @@ class LightningCLI(cli.LightningCLI):
         )
         warnings.filterwarnings(
             "ignore",
-            message=r".*Attribute 'network' is an instance of `nn\.Module` and is already saved during checkpointing.*",
-        )
-        warnings.filterwarnings(
-            "ignore",
-            message=r".*Graph break due to unsupported builtin PIL\._imaging\.fill.*",
+            message=r".*functools.partial will be a method descriptor in future Python versions*",
         )
 
         super().__init__(*args, **kwargs)
