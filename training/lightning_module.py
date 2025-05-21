@@ -573,7 +573,7 @@ class LightningModule(lightning.LightningModule):
                 results["map_50"],
             )
             self.log(
-                f"metrics/{log_prefix}_ap_75_all{block_postfix}",
+                f"metriccs/{log_prefix}_ap_75_all{block_postfix}",
                 results["map_75"],
             )
 
