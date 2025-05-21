@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------
 # © 2025 Mobile Perception Systems Lab at TU/e. All rights reserved.
 # Licensed under the MIT License.
-#
+# 
 # Portions of this file are adapted from the timm library by Ross Wightman,
 # used under the Apache 2.0 License.
 # ---------------------------------------------------------------
@@ -68,7 +68,6 @@ class EoMT(nn.Module):
 
         return mask_logits, class_logits
 
-    @torch.compiler.disable
     def _disable_attn_mask(self, attn_mask, prob):
         if prob < 1:
             random_queries = (
