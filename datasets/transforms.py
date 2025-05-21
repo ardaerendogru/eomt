@@ -93,31 +93,26 @@ class Transforms(nn.Module):
 
         return img, target
 
-    def forward(self, img, target: dict):
-        img_ = img.clone()
-        target_ = {
-            "masks": target["masks"][~target["is_crowd"]].clone(),
-            "labels": target["labels"][~target["is_crowd"]].clone(),
-        }
+    def _filter(self, target: dict[str, Union[Tensor, TVTensor]], keep: Tensor) -> dict:
+        return {k: wrap(v[keep], like=v) for k, v in target.items()}
 
-        if self.color_jitter_enabled:
-            img_ = self.color_jitter(img_)
+    def forward(
+        self, img: Tensor, target: dict[str, Union[Tensor, TVTensor]]
+    ) -> tuple[Tensor, dict[str, Union[Tensor, TVTensor]]]:
+        img_orig, target_orig = img, target
 
-        img_, target_ = self.random_horizontal_flip(img_, target)
+        target = self._filter(target, ~target["is_crowd"])
 
-        img_, target_ = self.scale_jitter(img_, target_)
+        img = self.color_jitter(img)
+        img, target = self.random_horizontal_flip(img, target)
+        img, target = self.scale_jitter(img, target)
+        img, target = self.pad(img, target)
+        img, target = self.random_crop(img, target)
 
-        img_, target_ = self.pad(img_, target_)
+        valid = target["masks"].flatten(1).any(1)
+        if not valid.any():
+            return self(img_orig, target_orig)
 
-        img_, target_ = self.random_crop(img_, target_)
+        target = self._filter(target, valid)
 
-        mask_sums = target_["masks"].sum(dim=[-2, -1])
-        non_empty_mask = mask_sums > 0
-
-        if non_empty_mask.sum() == 0:
-            return self(img, target)
-
-        target_["masks"] = target_["masks"][non_empty_mask]
-        target_["labels"] = target_["labels"][non_empty_mask]
-
-        return img_, target_
+        return img, target

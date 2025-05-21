@@ -35,7 +35,6 @@ from torchvision.transforms.v2.functional import pad
 
 from training.two_stage_warmup_poly_schedule import TwoStageWarmupPolySchedule
 
-
 bold_green = "\033[1;32m"
 reset = "\033[0m"
 
@@ -56,8 +55,6 @@ class LightningModule(lightning.LightningModule):
         warmup_steps: tuple[int, int],
         ckpt_path=None,
         load_ckpt_class_head=True,
-        finetuning_type = "all",
-        lr_head_multiplier: float = 1.0,
     ):
         super().__init__()
 
@@ -72,9 +69,9 @@ class LightningModule(lightning.LightningModule):
         self.weight_decay = weight_decay
         self.poly_power = poly_power
         self.warmup_steps = warmup_steps
-        self.lr_head_multiplier = lr_head_multiplier
+
         self.strict_loading = False
-        
+
         if ckpt_path:
             ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=True)
 
@@ -89,16 +86,9 @@ class LightningModule(lightning.LightningModule):
                     for k, v in ckpt.items()
                     if "class_head" not in k and "class_predictor" not in k
                 }
-            
-            # ckpt = {
-            #         k.replace('qkv', 'qkv.qkv'): v
-            #         for k, v in ckpt.items()
-                   
-            # }
-
 
             incompatible_keys = self.load_state_dict(ckpt, strict=False)
-            # print(self.state_dict().keys())
+
             if incompatible_keys.missing_keys:
                 if not load_ckpt_class_head:
                     missing_keys = [
@@ -110,169 +100,49 @@ class LightningModule(lightning.LightningModule):
                     missing_keys = incompatible_keys.missing_keys
 
                 if missing_keys:
-                    print(f"Missing keys: {missing_keys}")
+                    raise ValueError(f"Missing keys: {missing_keys}")
 
             if incompatible_keys.unexpected_keys:
-                print(f"Unexpected keys: {incompatible_keys.unexpected_keys}")
+                raise ValueError(
+                    f"Unexpected keys: {incompatible_keys.unexpected_keys}"
+                )
 
-                
         self.log = torch.compiler.disable(self.log)  # type: ignore
-        print(self.network)
-        if finetuning_type == "full":
-            pass
-        elif finetuning_type == "peft":
-            self.network.encoder.apply_lora()
-
-        elif finetuning_type == "MLPs":
-            self._freeze_network()
-            for param in self.network.mask_head.parameters():
-                param.requires_grad = True
-            for param in self.network.class_head.parameters():
-                param.requires_grad = True
-        elif finetuning_type == "Query":
-            self._freeze_network()
-            for param in self.network.q.parameters():
-                param.requires_grad = True
-            for param in self.network.class_head.parameters():
-                param.requires_grad = True
-        elif finetuning_type == "Linear":
-            self._freeze_network()
-            for param in self.network.class_head.parameters():
-                param.requires_grad = True
-        elif finetuning_type == "full_head":
-            self._freeze_network()
-            for param in self.network.mask_head.parameters():
-                param.requires_grad = True
-            for param in self.network.class_head.parameters():
-                param.requires_grad = True
-            for param in self.network.upscale.parameters():
-                param.requires_grad = True  
-        elif finetuning_type == "qhead":
-            self._freeze_network()
-            for param in self.network.q.parameters():
-                param.requires_grad = True
-            for param in self.network.class_head.parameters():
-                param.requires_grad = True
-            for param in self.network.upscale.parameters():
-                param.requires_grad = True
-            for param in self.network.mask_head.parameters():
-                param.requires_grad = True
-        elif finetuning_type == "full_decoder":
-            self._freeze_network()
-            for param in self.network.mask_head.parameters():
-                param.requires_grad = True
-            for param in self.network.class_head.parameters():
-                param.requires_grad = True
-            for param in self.network.upscale.parameters():
-                param.requires_grad = True
-            for param in self.network.q.parameters():
-                param.requires_grad = True
-            for i in range(len(self.network.encoder.backbone.blocks)-4,len(self.network.encoder.backbone.blocks)):
-                for param in self.network.encoder.backbone.blocks[i].parameters():
-                    param.requires_grad = True   
-        
-        elif finetuning_type == "registers":
-            
-            self._freeze_network()
-            for param in self.network.mask_head.parameters():
-                param.requires_grad = True
-            for param in self.network.class_head.parameters():
-                param.requires_grad = True
-            for param in self.network.upscale.parameters():
-                param.requires_grad = True
-            for param in self.network.q.parameters():
-                param.requires_grad = True
-            
-            self.network.encoder.backbone.cls_token.requires_grad = True
-            self.network.encoder.backbone.pos_embed.requires_grad = True
-            self.network.encoder.backbone.reg_token.requires_grad = True
-
-        else:
-            raise ValueError(f"Invalid finetuning type: {finetuning_type}")
-    
-    def _freeze_network(self):
-        for param in self.network.parameters():
-            param.requires_grad = False
 
     def configure_optimizers(self):
         encoder_param_names = {
-            n for n, p in self.network.encoder.backbone.named_parameters() if p.requires_grad
+            n for n, _ in self.network.encoder.backbone.named_parameters()
         }
         backbone_param_groups = []
         other_param_groups = []
-        head_param_groups = []
         backbone_blocks = len(self.network.encoder.backbone.blocks)
-        
-        # Iterate through trainable parameters only
-        for name, param in self.named_parameters():
-            if not param.requires_grad:
-                continue  # Skip frozen parameters
+        block_i = backbone_blocks
 
+        for name, param in reversed(list(self.named_parameters())):
             lr = self.lr
-            param_added_to_backbone = False # Flag to check if added to backbone group
-
-            # Check if the parameter belongs to the backbone encoder
-            backbone_name = name.replace("network.encoder.backbone.", "")
-            if backbone_name in encoder_param_names:
+            if name.replace("network.encoder.backbone.", "") in encoder_param_names:
                 name_list = name.split(".")
-                block_i = backbone_blocks # Default if not in a block (e.g., cls_token, pos_embed)
                 is_block = False
                 for i, key in enumerate(name_list):
                     if key == "blocks":
-                        try:
-                            block_i = int(name_list[i + 1])
-                            is_block = True
-                            break # Found block index, no need to check further
-                        except (IndexError, ValueError):
-                            # Handle cases where 'blocks' is not followed by an integer index if necessary
-                            pass 
-                
-                # Apply Layer-wise Learning Rate Decay (LLRD)
-                # Original logic applied decay based on block_i, let's maintain that.
-                # Note: The original logic had a potentially confusing default block_i = backbone_blocks
-                # and applied decay if is_block or block_i == 0. Let's simplify slightly
-                # Assume non-block backbone params get the base backbone LR (highest decay)
-                # unless they are explicitly handled otherwise (e.g., embeddings)
-                current_block_decay_level = backbone_blocks - 1 # Max decay level for earliest block/embeddings
-                if is_block:
-                   current_block_decay_level = block_i
-                
-                lr *= self.llrd ** (backbone_blocks - 1 - current_block_decay_level)
-
+                        block_i = int(name_list[i + 1])
+                        is_block = True
+                if is_block or block_i == 0:
+                    lr *= self.llrd ** (backbone_blocks - 1 - block_i)
                 backbone_param_groups.append(
                     {"params": [param], "lr": lr, "name": name}
                 )
-                param_added_to_backbone = True
-            if 'class_head' in name:
-                rank_zero_info(f"Adding {name} to head group")
-                head_param_groups.append(
-                    {"params": [param], "lr": lr*self.lr_head_multiplier, "name": name}
-                )
-                param_added_to_backbone = True
-            # Add to 'other' group if it's trainable and not added to backbone groups
-            if not param_added_to_backbone:
-                 other_param_groups.append(
-                    # Assuming non-backbone params use the base learning rate
-                    {"params": [param], "lr": self.lr, "name": name} 
+            else:
+                other_param_groups.append(
+                    {"params": [param], "lr": self.lr, "name": name}
                 )
 
-        # Combine the groups (Backbone groups should be ordered from later to earlier layers 
-        # if the scheduler needs that, but the current reversal logic seems okay)
-        # No need to reverse here as the loop iterates in default order
-
-
-        if len(head_param_groups) == 0:
-            rank_zero_info("No head parameters found")
-            exit()
-
-
-        param_groups = backbone_param_groups + other_param_groups + head_param_groups
+        param_groups = backbone_param_groups + other_param_groups
         optimizer = AdamW(param_groups, weight_decay=self.weight_decay)
 
         scheduler = TwoStageWarmupPolySchedule(
             optimizer,
-            # Pass the actual number of parameter groups being optimized
-            num_backbone_params=len(backbone_param_groups), 
+            num_backbone_params=len(backbone_param_groups),
             warmup_steps=self.warmup_steps,
             total_steps=self.trainer.estimated_stepping_batches,
             poly_power=self.poly_power,
@@ -296,7 +166,6 @@ class LightningModule(lightning.LightningModule):
         imgs, targets = batch
 
         mask_logits_per_block, class_logits_per_block = self(imgs)
-        # print(f"Training step called with batch size: {len(batch[0])}")
 
         losses_all_blocks = {}
         for i, (mask_logits, class_logits) in enumerate(
@@ -368,11 +237,6 @@ class LightningModule(lightning.LightningModule):
             [MeanAveragePrecision(iou_type="segm") for _ in range(num_blocks)]
         )
 
-    def init_metrics_detection(self, num_blocks):
-        self.metrics = nn.ModuleList(
-            [MeanAveragePrecision(iou_type="bbox") for _ in range(num_blocks)]
-        )
-
     def init_metrics_panoptic(self, thing_classes, stuff_classes, num_blocks):
         self.metrics = nn.ModuleList(
             [
@@ -398,15 +262,6 @@ class LightningModule(lightning.LightningModule):
 
     @torch.compiler.disable
     def update_metrics_instance(
-        self,
-        preds: list[dict],
-        targets: list[dict],
-        block_idx,
-    ):
-        self.metrics[block_idx].update(preds, targets)
-
-    @torch.compiler.disable
-    def update_metrics_detection(
         self,
         preds: list[dict],
         targets: list[dict],
@@ -533,10 +388,9 @@ class LightningModule(lightning.LightningModule):
 
             block_postfix = self.block_postfix(i)
             if log_per_class:
-                original_class_ids_ordered = list(metric.things) + list(metric.stuffs)
                 for class_idx, iou in enumerate(iou_per_class):
                     self.log(
-                        f"metrics/{log_prefix}_iou_class_{original_class_ids_ordered[class_idx]}{block_postfix}",
+                        f"metrics/{log_prefix}_iou_class_{class_idx}{block_postfix}",
                         iou,
                     )
 
@@ -577,7 +431,7 @@ class LightningModule(lightning.LightningModule):
                 results["map_75"],
             )
 
-    def _on_eval_epoch_end_panoptic(self, log_prefix, log_per_class=True):
+    def _on_eval_epoch_end_panoptic(self, log_prefix, log_per_class=False):
         for i, metric in enumerate(self.metrics):  # type: ignore
             result = metric.compute()[:-1]
             metric.reset()
@@ -586,26 +440,18 @@ class LightningModule(lightning.LightningModule):
 
             block_postfix = self.block_postfix(i)
             if log_per_class:
-                # Determine the actual class IDs for the computed metrics.
-                # metric.things and metric.stuffs hold the original class IDs in the
-                # order that PanopticQuality computes them.
-                # Since result was sliced [:-1], pq, sq, rq correspond to the metrics
-                # for these original class IDs, excluding the last one.
-                original_class_ids_ordered = list(metric.things) + list(metric.stuffs)
-                
-                for class_tensor_idx in range(len(pq)):
-                    actual_class_id = original_class_ids_ordered[class_tensor_idx]
+                for class_idx in range(len(pq)):
                     self.log(
-                        f"metrics/{log_prefix}_pq_class_{actual_class_id}{block_postfix}",
-                        pq[class_tensor_idx],
+                        f"metrics/{log_prefix}_pq_class_{class_idx}{block_postfix}",
+                        pq[class_idx],
                     )
                     self.log(
-                        f"metrics/{log_prefix}_sq_class_{actual_class_id}{block_postfix}",
-                        sq[class_tensor_idx],
+                        f"metrics/{log_prefix}_sq_class_{class_idx}{block_postfix}",
+                        sq[class_idx],
                     )
                     self.log(
-                        f"metrics/{log_prefix}_rq_class_{actual_class_id}{block_postfix}",
-                        rq[class_tensor_idx],
+                        f"metrics/{log_prefix}_rq_class_{class_idx}{block_postfix}",
+                        rq[class_idx],
                     )
 
             self.log(
